@@ -349,6 +349,7 @@ end // transmitter logic
 assign stx_pad_o = lcr[`UART_LC_BC] ? 1'b0 : stx_o_tmp;    // Break condition
 
 `ifdef VCD_DUMP_ON
+//记录波形
    initial begin
            $dumpvars(1, enable);
            $dumpvars(1, tstate, tf_count, clk);

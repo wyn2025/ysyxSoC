@@ -38,6 +38,7 @@
         prime           549         97                  5.66
 */
 
+`define PSRAM_QPI
 `timescale              1ns/1ps
 `default_nettype        none
 
@@ -59,8 +60,13 @@ module PSRAM_READER (
 
     localparam  IDLE = 1'b0,
                 READ = 1'b1;
+`ifdef PSRAM_QPI
+    localparam COUNTER_LES = 6;
+`else
+    localparam COUNTER_LES = 0;
+`endif
 
-    wire [7:0]  FINAL_COUNT = 19 + size*2; // was 27: Always read 1 word
+    wire [7:0]  FINAL_COUNT = 19 + size*2 - COUNTER_LES; // was 27: Always read 1 word
 
     reg         state, nstate;
     reg [7:0]   counter;
@@ -113,22 +119,33 @@ module PSRAM_READER (
             saddr <= {addr[23:0]};
 
     // Sample with the negedge of sck
+`ifdef PSRAM_QPI
+    wire[1:0] byte_index = {counter[7:1] - 8'd7}[1:0];
+`else
     wire[1:0] byte_index = {counter[7:1] - 8'd10}[1:0];
+`endif
     always @ (posedge clk)
-        if(counter >= 20 && counter <= FINAL_COUNT)
+        if(counter >= 20 - COUNTER_LES && counter <= FINAL_COUNT)
             if(sck)
                 data[byte_index] <= {data[byte_index][3:0], din}; // Optimize!
 
-    assign dout     =   (counter < 8)   ?   {3'b0, CMD_EBH[7 - counter]}:
-                        (counter == 8)  ?   saddr[23:20]        :
-                        (counter == 9)  ?   saddr[19:16]        :
-                        (counter == 10) ?   saddr[15:12]        :
-                        (counter == 11) ?   saddr[11:8]         :
-                        (counter == 12) ?   saddr[7:4]          :
-                        (counter == 13) ?   saddr[3:0]          :
+    assign dout     =
+    `ifdef PSRAM_QPI
+                        (counter == 0) ? CMD_EBH[7:4] :
+                        (counter == 1) ? CMD_EBH[3:0] :
+    `else
+                        (counter < 8-COUNTER_LES)   ?   {3'b0, CMD_EBH[7 - counter]}:
+    `endif
+                        (counter == 8-COUNTER_LES)  ?   saddr[23:20]        :
+                        (counter == 9-COUNTER_LES)  ?   saddr[19:16]        :
+                        (counter == 10-COUNTER_LES) ?   saddr[15:12]        :
+                        (counter == 11-COUNTER_LES) ?   saddr[11:8]         :
+                        (counter == 12-COUNTER_LES) ?   saddr[7:4]          :
+                        (counter == 13-COUNTER_LES) ?   saddr[3:0]          :
                         4'h0;
 
-    assign douten   = (counter < 14);
+
+    assign douten   = (counter < 14-COUNTER_LES);
 
     assign done     = (counter == FINAL_COUNT+1);
 
@@ -161,7 +178,13 @@ module PSRAM_WRITER (
     localparam  IDLE = 1'b0,
                 WRITE = 1'b1;
 
-    wire[7:0]        FINAL_COUNT = 13 + size*2;
+`ifdef PSRAM_QPI
+    localparam COUNTER_LES = 6;
+`else
+    localparam COUNTER_LES = 0;
+`endif
+
+    wire[7:0]        FINAL_COUNT = 13 + size*2 - COUNTER_LES;
 
     reg         state, nstate;
     reg [7:0]   counter;
@@ -212,25 +235,95 @@ module PSRAM_WRITER (
         else if((state == IDLE) && wr)
             saddr <= addr;
 
-    assign dout     =   (counter < 8)   ?   {3'b0, CMD_38H[7 - counter]}:
-                        (counter == 8)  ?   saddr[23:20]        :
-                        (counter == 9)  ?   saddr[19:16]        :
-                        (counter == 10) ?   saddr[15:12]        :
-                        (counter == 11) ?   saddr[11:8]         :
-                        (counter == 12) ?   saddr[7:4]          :
-                        (counter == 13) ?   saddr[3:0]          :
-                        (counter == 14) ?   line[7:4]           :
-                        (counter == 15) ?   line[3:0]           :
-                        (counter == 16) ?   line[15:12]         :
-                        (counter == 17) ?   line[11:8]          :
-                        (counter == 18) ?   line[23:20]         :
-                        (counter == 19) ?   line[19:16]         :
-                        (counter == 20) ?   line[31:28]         :
+    assign dout     =   `ifdef PSRAM_QPI
+                        (counter == 0) ? CMD_38H[7:4] :
+                        (counter == 1) ? CMD_38H[3:0] :
+    `else
+                        (counter < 8-COUNTER_LES)   ?   {3'b0, CMD_38H[7 - counter]}:
+    `endif
+                        (counter == 8-COUNTER_LES)  ?   saddr[23:20]        :
+                        (counter == 9-COUNTER_LES)  ?   saddr[19:16]        :
+                        (counter == 10-COUNTER_LES) ?   saddr[15:12]        :
+                        (counter == 11-COUNTER_LES) ?   saddr[11:8]         :
+                        (counter == 12-COUNTER_LES) ?   saddr[7:4]          :
+                        (counter == 13-COUNTER_LES) ?   saddr[3:0]          :
+                        (counter == 14-COUNTER_LES) ?   line[7:4]           :
+                        (counter == 15-COUNTER_LES) ?   line[3:0]           :
+                        (counter == 16-COUNTER_LES) ?   line[15:12]         :
+                        (counter == 17-COUNTER_LES) ?   line[11:8]          :
+                        (counter == 18-COUNTER_LES) ?   line[23:20]         :
+                        (counter == 19-COUNTER_LES) ?   line[19:16]         :
+                        (counter == 20-COUNTER_LES) ?   line[31:28]         :
                         line[27:24];
 
     assign douten   = (~ce_n);
 
-    assign done     = (counter == FINAL_COUNT + 1);
+    assign done     = (counter == FINAL_COUNT + 1 );
+endmodule
 
+// Using 35H Command
+module PSRAM_QPI (
+    input   wire            clk,
+    input   wire            rst_n,
+    input   wire            wr,
+    output  wire            done,
+
+    output  reg             sck,
+    output  reg             ce_n,
+    output  wire [3:0]      dout,
+    output  wire            douten
+);
+    //localparam  DATA_START = 14;
+    localparam  IDLE = 1'b0,
+                CMD = 1'b1;
+
+    wire[7:0]        FINAL_COUNT = 8;
+
+    reg         state, nstate;
+    reg [7:0]   counter;
+
+    wire[7:0]   CMD_35H = 8'h35;
+
+    always @*
+        case (state)
+            IDLE: if(wr) nstate = CMD; else nstate = IDLE;
+            CMD: if(done) nstate = IDLE; else nstate = CMD;
+        endcase
+
+    always @ (posedge clk or negedge rst_n)
+        if(!rst_n) state <= IDLE;
+        else state <= nstate;
+
+    // Drive the Serial Clock (sck) @ clk/2
+    always @ (posedge clk or negedge rst_n)
+        if(!rst_n)
+            sck <= 1'b0;
+        else if(~ce_n)
+            sck <= ~ sck;
+        else if(state == IDLE)
+            sck <= 1'b0;
+
+    // ce_n logic
+    always @ (posedge clk or negedge rst_n)
+        if(!rst_n)
+            ce_n <= 1'b1;
+        else if(state == CMD)
+            ce_n <= 1'b0;
+        else
+            ce_n <= 1'b1;
+
+    always @ (posedge clk or negedge rst_n)
+        if(!rst_n)
+            counter <= 8'b0;
+        else if(sck & ~done)
+            counter <= counter + 1'b1;
+        else if(state == IDLE)
+            counter <= 8'b0;
+
+    assign dout     =   {3'b0, CMD_35H[7 - counter]};
+
+    assign douten   = (~ce_n);
+
+    assign done     = (counter == FINAL_COUNT + 1);
 
 endmodule

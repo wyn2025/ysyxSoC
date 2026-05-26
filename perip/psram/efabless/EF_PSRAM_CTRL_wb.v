@@ -39,8 +39,9 @@ module EF_PSRAM_CTRL_wb (
     output  wire [3:0]      douten
 );
 
-    localparam  ST_IDLE = 1'b0,
-                ST_WAIT = 1'b1;
+    localparam  ST_IDLE = 2'b00,
+                ST_WAIT = 2'b01,
+                ST_QSPI = 2'b10;
 
     wire        mr_sck;
     wire        mr_ce_n;
@@ -53,6 +54,11 @@ module EF_PSRAM_CTRL_wb (
     wire [3:0]  mw_din;
     wire [3:0]  mw_dout;
     wire        mw_doe;
+
+    wire        mc_sck;
+    wire        mc_ce_n;
+    wire [3:0]  mc_dout;
+    wire        mc_doe;
 
     // PSRAM Reader and Writer wires
     wire        mr_rd;
@@ -68,16 +74,24 @@ module EF_PSRAM_CTRL_wb (
     wire        wb_re           =   ~we_i & wb_valid;
     //wire[3:0]   wb_byte_sel     =   sel_i & {4{wb_we}};
 
+    wire        is_qpi;
+    wire        is_qspi;
+
     // The FSM
-    reg         state, nstate;
+    reg [1:0]        state, nstate;
     always @ (posedge clk_i or posedge rst_i)
         if(rst_i)
-            state <= ST_IDLE;
+            state <= ST_QSPI;
         else
             state <= nstate;
 
     always @* begin
         case(state)
+            ST_QSPI :
+                if(is_qpi)
+                    nstate = ST_IDLE;
+                else
+                    nstate = ST_QSPI;
             ST_IDLE :
                 if(wb_valid)
                     nstate = ST_WAIT;
@@ -89,6 +103,7 @@ module EF_PSRAM_CTRL_wb (
                     nstate = ST_IDLE;
                 else
                     nstate = ST_WAIT;
+            default : nstate = ST_QSPI;
         endcase
     end
 
@@ -129,6 +144,7 @@ module EF_PSRAM_CTRL_wb (
 
     assign mr_rd    = ( (state==ST_IDLE ) & wb_re );
     assign mw_wr    = ( (state==ST_IDLE ) & wb_we );
+    assign is_qspi  = (state == ST_QSPI);
 
     PSRAM_READER MR (
         .clk(clk_i),
@@ -161,10 +177,24 @@ module EF_PSRAM_CTRL_wb (
         .douten(mw_doe)
     );
 
-    assign sck  = wb_we ? mw_sck  : mr_sck;
-    assign ce_n = wb_we ? mw_ce_n : mr_ce_n;
-    assign dout = wb_we ? mw_dout : mr_dout;
-    assign douten  = wb_we ? {4{mw_doe}}  : {4{mr_doe}};
+    PSRAM_QPI MC (
+        .clk(clk_i),
+        .rst_n(~rst_i),
+        .wr(is_qspi),
+        .done(is_qpi),
+        .sck(mc_sck),
+        .ce_n(mc_ce_n),
+        .dout(mc_dout),
+        .douten(mc_doe)
+    );
+    assign sck  = is_qspi ? mc_sck : 
+                    wb_we ? mw_sck  : mr_sck;
+    assign ce_n = is_qspi ? mc_ce_n : 
+                    wb_we ? mw_ce_n : mr_ce_n;
+    assign dout = is_qspi ? mc_dout : 
+                    wb_we ? mw_dout : mr_dout;
+    assign douten  = is_qspi ? {4{mc_doe}}  : 
+                      wb_we ? {4{mw_doe}}  : {4{mr_doe}};
 
     assign mw_din = din;
     assign mr_din = din;

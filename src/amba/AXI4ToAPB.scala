@@ -10,6 +10,28 @@ import freechips.rocketchip.amba.apb._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
+/** 与 chisel3.assert 用法一致，但失败时生成 $finish 而非 $fatal */
+object assertFinish {
+  def apply(
+    cond:    Bool,
+    message: String = "Assertion failed"
+  )(implicit
+  // implicit: 参数放第二参数组, 不影响正常调用语法，调用方无需手动传任何额外参数
+  // Scala 隐式参数，由编译器在调用处自动填充，运行时是纯字符串常量
+    file: sourcecode.File,   // 编译期注入：调用处的完整文件路径
+    line: sourcecode.Line    // 编译期注入：调用处的行号
+  ): Unit = {
+    // 只取文件名，去掉路径前缀，与 chisel assert 风格一致
+    val fileName = file.value.split('/').last
+    val location = s"$fileName:${line.value}"
+
+    when (!cond) {
+      printf(s"[ASSERT FAILED] $message\n  at $location\n")
+      chisel3.stop()
+    }
+  }
+}
+
 case class AXI4ToAPBNode()(implicit valName: ValName) extends MixedAdapterNode(AXI4Imp, APBImp)(
   dFn = { mp =>
     APBMasterPortParameters(
@@ -58,11 +80,11 @@ class AXI4ToAPB(val aFlow: Boolean = true)(implicit p: Parameters) extends LazyM
       }
 
       // burst is not supported
-      assert(!(ar.valid && ar.bits.len =/= 0.U))
-      assert(!(aw.valid && aw.bits.len =/= 0.U))
+      assertFinish(!(ar.valid && ar.bits.len =/= 0.U), "ar.burst is not supported")
+      assertFinish(!(aw.valid && aw.bits.len =/= 0.U), "aw.burst is not supported")
       // size > 4 is not supported
-      assert(!(ar.valid && ar.bits.size > "b10".U))
-      assert(!(aw.valid && aw.bits.size > "b10".U))
+      assertFinish(!(ar.valid && ar.bits.size > "b10".U), "ar.size exceeds 4 bytes")
+      assertFinish(!(aw.valid && aw.bits.size > "b10".U), "aw.size exceeds 4 bytes")
 
       val rid_reg    = RegEnable(ar.bits.id, accept_read)
       val bid_reg    = RegEnable(aw.bits.id, accept_write)

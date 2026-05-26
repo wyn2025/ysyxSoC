@@ -13,14 +13,15 @@ import freechips.rocketchip.util._
 class SDRAMIO extends Bundle {
   val clk = Output(Bool())
   val cke = Output(Bool())
-  val cs  = Output(Bool())
+  // Bool() 是 1 位布尔类型，等价于 UInt(1.W)
+  val cs  = Output(UInt(2.W))
   val ras = Output(Bool())
   val cas = Output(Bool())
   val we  = Output(Bool())
   val a   = Output(UInt(13.W))
   val ba  = Output(UInt(2.W))
-  val dqm = Output(UInt(2.W))
-  val dq  = Analog(16.W)
+  val dqm = Output(UInt(4.W))
+  val dq  = Analog(64.W)
 }
 
 class sdram_top_axi extends BlackBox {

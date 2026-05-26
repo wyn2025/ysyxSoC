@@ -10,6 +10,9 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.util._
 
 class APBDelayerIO extends Bundle {
+  // val/var是声明关键字， 不用加分号，冒号后是类型(不加类型会自动适配)，等号后是初始值
+  // val: 不可变变量，必须初始化，且只能赋值一次，类似于 Java 的 final 变量
+  // var: 可变变量，可以多次赋值，类似于 Java 的普通变量
   val clock = Input(Clock())
   val reset = Input(Reset())
   val in = Flipped(new APBBundle(APBBundleParameters(addrBits = 32, dataBits = 32)))
