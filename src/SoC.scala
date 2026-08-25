@@ -34,6 +34,7 @@ class ysyxSoCASIC(implicit p: Parameters) extends LazyModule {
   val luart = LazyModule(new APBUart16550(AddressSet.misaligned(0x10000000, 0x1000)))
   val lgpio = LazyModule(new APBGPIO(AddressSet.misaligned(0x10002000, 0x10)))
   val lkeyboard = LazyModule(new APBKeyboard(AddressSet.misaligned(0x10011000, 0x8)))
+  // AddressSet 不是 (base, size)，而是 (base, mask),它表示"所有满足 addr & ~mask == base 的地址"
   val lvga = LazyModule(new APBVGA(AddressSet.misaligned(0x21000000, 0x200000)))
   val lspi  = LazyModule(new APBSPI(
     AddressSet.misaligned(0x10001000, 0x1000) ++    // SPI controller

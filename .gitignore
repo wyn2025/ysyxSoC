@@ -1,2 +1,18 @@
 build/
 out/
+
+# Bloop / Metals / BSP
+.bloop/
+.bsp/
+.metals/
+metals.sbt
+.scala-build/
+
+# sbt
+target/
+project/target/
+project/project/
+project/metals.sbt
+
+# mill
+out/
